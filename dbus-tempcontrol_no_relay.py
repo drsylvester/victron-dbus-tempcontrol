@@ -272,7 +272,7 @@ def main():
             for i, alternator_id in enumerate(alternators):
                 alternatorid = i + 1
                 alternatorinstance = alternatorInstanceBase + i
-                dbusservice['%02d' % alternatorid] = AlternatorTempControl(alternatorid=alternatorid, servicename='com.victronenergy.temperature', deviceinstance=deviceinstance, id=alternator_id)
+                dbusservice['%02d' % alternatorid] = AlternatorTempControl(alternatorid=alternatorid, servicename='com.victronenergy.temperature', deviceinstance=alternatorinstance, id=alternator_id)
                 GLib.timeout_add(updateInterval, dbusservice['%02d' % alternatorid].update)
                 dbusservice['%02d' % alternatorid].update()
 
