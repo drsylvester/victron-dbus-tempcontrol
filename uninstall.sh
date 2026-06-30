@@ -4,6 +4,6 @@ DAEMON_NAME=${SCRIPT_DIR##*/}
 
 rm /service/$DAEMON_NAME
 kill $(pgrep -f "supervise $DAEMON_NAME")
-kill $(pgrep -f "python $SCRIPT_DIR/dbus-tempcontrol.py")
+kill $(pgrep -f "python $SCRIPT_DIR/dbus-tempcontrol_no_relay.py")
 chmod a-x $SCRIPT_DIR/service/run
 sed -i "s/\/data\/$DAEMON_NAME\/install.sh//" /data/rc.local

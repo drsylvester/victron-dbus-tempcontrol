@@ -19,7 +19,7 @@ touch $filename
 chmod 755 $filename
 echo "#!/bin/bash" >> $filename
 echo "rm $SCRIPT_DIR/current.log*" >> $filename
-echo "python $SCRIPT_DIR/dbus-tempcontrol.py" >> $filename
+echo "python $SCRIPT_DIR/dbus-tempcontrol_no_relay.py" >> $filename
 
 chmod a+x $SCRIPT_DIR/service/run
 chmod 755 $SCRIPT_DIR/service/run

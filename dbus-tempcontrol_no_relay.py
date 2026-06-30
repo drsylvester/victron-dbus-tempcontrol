@@ -137,6 +137,12 @@ def discover_solar_chargers():
     names = iface.ListNames()
     return sorted(str(n) for n in names if str(n).startswith('com.victronenergy.solarcharger.'))
 
+def discover_alternator_chargers():
+    bus = dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()
+    proxy = bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus')
+    iface = dbus.Interface(proxy, 'org.freedesktop.DBus')
+    names = iface.ListNames()
+    return sorted(str(n) for n in names if str(n).startswith('com.victronenergy.alternator.'))
 
 def main():
         print (" *********************************************** ")
@@ -164,13 +170,17 @@ def main():
         mainloop = GLib.MainLoop()
 
         updateInterval = int(config['DEFAULT']['updateInterval'])
-        deviceInstanceBase = int(config['DEFAULT'].get('deviceinstancebase', '22'))
+        deviceInstanceBase = int(config['DEFAULT'].get('deviceinstancebase', '24'))
+        alternatorInstanceBase = int(config['DEFAULT'].get('alternatorinstancebase', '26'))
 
         chargers = discover_solar_chargers()
         logging.info("Discovered %d solar charger(s): %s" % (len(chargers), chargers))
 
-        if not chargers:
-            logging.error("No solar chargers found on DBus — exiting")
+        alternators = discover_alternator_chargers()
+        logging.info("Discovered %d alternator charger(s): %s" % (len(alternators), alternators))
+
+        if not chargers and not alternators:
+            logging.error("No solar chargers and no alternators found on DBus — exiting")
             sys.exit(1)
 
         for i, charger_id in enumerate(chargers):
