@@ -7,6 +7,7 @@ import pprint
 import os
 import logging
 from logging.handlers import RotatingFileHandler
+import time
 import sys
 from dbus.mainloop.glib import DBusGMainLoop
 import collections
@@ -246,9 +247,13 @@ def main():
 
         mainloop = GLib.MainLoop()
 
+        startupDelay = int(config['DEFAULT'].get('startupDelay', '10'))
         updateInterval = int(config['DEFAULT']['updateInterval'])
         deviceInstanceBase = int(config['DEFAULT'].get('deviceinstancebase', '24'))
         alternatorInstanceBase = int(config['DEFAULT'].get('alternatorinstancebase', '26'))
+
+        if startupDelay > 0:
+            time.sleep(startupDelay)
 
         chargers = discover_solar_chargers()
         logging.info("Discovered %d solar charger(s): %s" % (len(chargers), chargers))
