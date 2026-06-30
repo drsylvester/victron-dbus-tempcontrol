@@ -42,9 +42,9 @@ def to_native_type(data):
 
 
 
-class TempControl():
+class MpptTempControl():
     def __init__(self, servicename, deviceinstance, id, mpptid):
-        logging.debug('Initialize Service...')
+        logging.debug('Initialize MpptTempControl Service...')
 
 
         _c = lambda p, v: (str(v) + 'C')
@@ -124,6 +124,83 @@ class TempControl():
         logging.info("MPPT%02d Temperature: %.02f" % (self.mpptid , self.mppt01temp))
         return True
 
+
+class AlternatorTempControl():
+    def __init__(self, servicename, deviceinstance, id, alternatorid):
+        logging.debug('Initialize AlternatorTempControl Service...')
+
+
+        _c = lambda p, v: (str(v) + 'C')
+        self.settings = None 
+        self.id = id
+        self.alternatorid = alternatorid
+        self.deviceinstance = deviceinstance
+        self.dbusConn = dbus.SessionBus(private=True) if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus(private=True)
+        self.alternator01serial = VeDbusItemImport(self.dbusConn, id, '/Serial')
+        self.alternator01tempObj = self.dbusConn.get_object(id, '/Devices/0/VregLink')
+        self._init_device_settings(deviceinstance)
+        self.readAlternator01Temp()
+
+        self._dbusservice01 = VeDbusService("{}.can_{:02d}".format(servicename, deviceinstance), bus=self.dbusConn, register=False)
+        self._dbusservice01.add_path('/DeviceInstance', deviceinstance)
+        self._dbusservice01.add_path('/FirmwareVersion', 'v1.0')
+        self._dbusservice01.add_path('/DataManagerVersion', '1.0')
+        self._dbusservice01.add_path('/Serial', self.alternator01serial.get_value())
+        self._dbusservice01.add_path('/Mgmt/Connection', 'Ve.Can')
+        self._dbusservice01.add_path('/ProductName', 'Alternator Temperature')
+        self._dbusservice01.add_path('/ProductId', 0) 
+        self._dbusservice01.add_path('/CustomName', self.settings['/Customname'], writeable=True, onchangecallback=self.customnameChanged)
+        self._dbusservice01.add_path('/Temperature', None, gettextcallback=_c)
+        self._dbusservice01.add_path('/Status', 0)
+        self._dbusservice01.add_path('/TemperatureType', self.settings['/TemperatureType'], writeable=True, onchangecallback=self.tempTypeChanged)
+        self._dbusservice01.add_path('/Connected', 1)
+        self._dbusservice01.register()
+
+
+
+
+    def _init_device_settings(self, deviceinstance):
+        if self.settings:
+            return
+
+        path = '/Settings/AltTempCtrl/{}'.format(deviceinstance)
+
+        SETTINGS = {
+            '/Customname':  [path + '/CustomName', 'Alt%02d Temperature' % self.alternatorid, 0, 0],
+            '/TemperatureType': [path+'/TemperatureType', 2, 0, 0]
+        }
+
+        self.settings = SettingsDevice(self.dbusConn, SETTINGS, self._setting_changed)
+
+    def tempTypeChanged(self, path, val):
+        self.settings['/TemperatureType'] = val
+        return True
+
+    def customnameChanged(self, path, val):
+        self.settings['/Customname'] = val
+        return True
+  
+    def _setting_changed(self, setting, oldvalue, newvalue):
+        logging.info("setting changed, setting: %s, old: %s, new: %s" % (setting, oldvalue, newvalue))
+
+        if setting == '/Customname':
+          self._dbusservice01['/CustomName'] = newvalue
+        if setting == '/TemperatureType':
+          self._dbusservice01['/TemperatureType'] = newvalue
+
+    def readAlternator01Temp(self):
+        args = [60891]
+        ret = self.alternator01tempObj.get_dbus_method('GetVreg','com.victronenergy.VregLink')(*args) 
+        data = to_native_type(ret[1])
+        self.alternator01temp = (data[1]*256+data[0])/100 
+    
+    def update(self):
+        self.readAlternator01Temp()
+        self._dbusservice01['/Temperature'] = self.alternator01temp
+        logging.info("Alt%02d Temperature: %.02f" % (self.alternatorid , self.alternator01temp))
+        return True
+
+
 def getConfig():
     config = configparser.ConfigParser()
     config.read("%s/config.ini" % (os.path.dirname(os.path.realpath(__file__))))
@@ -183,12 +260,21 @@ def main():
             logging.error("No solar chargers and no alternators found on DBus — exiting")
             sys.exit(1)
 
-        for i, charger_id in enumerate(chargers):
-            mpptid = i + 1
-            deviceinstance = deviceInstanceBase + i
-            dbusservice['%02d' % mpptid] = TempControl(mpptid=mpptid, servicename='com.victronenergy.temperature', deviceinstance=deviceinstance, id=charger_id)
-            GLib.timeout_add(updateInterval, dbusservice['%02d' % mpptid].update)
-            dbusservice['%02d' % mpptid].update()
+        if chargers:
+            for i, charger_id in enumerate(chargers):
+                mpptid = i + 1
+                deviceinstance = deviceInstanceBase + i
+                dbusservice['%02d' % mpptid] = MpptTempControl(mpptid=mpptid, servicename='com.victronenergy.temperature', deviceinstance=deviceinstance, id=charger_id)
+                GLib.timeout_add(updateInterval, dbusservice['%02d' % mpptid].update)
+                dbusservice['%02d' % mpptid].update()
+
+        if alternators:
+            for i, alternator_id in enumerate(alternators):
+                alternatorid = i + 1
+                alternatorinstance = alternatorInstanceBase + i
+                dbusservice['%02d' % alternatorid] = AlternatorTempControl(alternatorid=alternatorid, servicename='com.victronenergy.temperature', deviceinstance=deviceinstance, id=alternator_id)
+                GLib.timeout_add(updateInterval, dbusservice['%02d' % alternatorid].update)
+                dbusservice['%02d' % alternatorid].update()
 
         mainloop.run()
 
