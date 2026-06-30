@@ -10,7 +10,7 @@ Tested with Smartsolar 150/35, Smartsolar is connected via VE.Direct.
 
 - Login to Cerbo GX with ssh
 - cd /data
-- wget https://github.com/pau1phi11ips/victron-dbus-tempcontrol/archive/refs/heads/main.zip
+- wget https://github.com/drsylvester/victron-dbus-tempcontrol/archive/refs/heads/main.zip
 - unzip main.zip
 - mv victron-dbus-tempcontrol-main dbus-tempcontrol
 - cd dbus-tempcontrol
