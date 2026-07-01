@@ -48,7 +48,7 @@ def to_native_type(data):
 
 
 class MpptTempControl():
-    def __init__(self, dbusConn, servicename, deviceinstance, id, mpptid):
+    def __init__(self, servicename, deviceinstance, id, mpptid):
         logging.debug('Initialize MpptTempControl Service...')
 
 
@@ -59,7 +59,7 @@ class MpptTempControl():
         self.mppt01temp = None
         self.mppt01power = 0
         self.deviceinstance = deviceinstance
-        self.dbusConn = dbusConn #dbus.SessionBus(private=True) if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus(private=True)
+        self.dbusConn = dbus.SessionBus(private=True) if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus(private=True)
         self.mppt01serial = VeDbusItemImport(self.dbusConn, id, '/Serial')
         self.mppt01tempObj = self.dbusConn.get_object(id, '/Devices/0/VregLink')
         self.mppt01powerObj = VeDbusItemImport(self.dbusConn,id,'/Yield/Power')
@@ -151,7 +151,7 @@ class MpptTempControl():
         return True
 
 class AlternatorTempControl():
-    def __init__(self, dbusConn, servicename, deviceinstance, id, alternatorid):
+    def __init__(self, servicename, deviceinstance, id, alternatorid):
         logging.debug('Initialize AlternatorTempControl Service...')
 
 
@@ -161,7 +161,7 @@ class AlternatorTempControl():
         self.alternator01temp = None
         self.alternatorid = alternatorid
         self.deviceinstance = deviceinstance
-        self.dbusConn = dbusConn #dbus.SessionBus(private=True) if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus(private=True)
+        self.dbusConn = dbus.SessionBus(private=True) if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus(private=True)
         self.alternator01serial = VeDbusItemImport(self.dbusConn, id, '/Serial')
         self.alternator01tempObj = self.dbusConn.get_object(id, '/Devices/0/VregLink')
         self._init_device_settings(deviceinstance)
@@ -307,7 +307,8 @@ def main():
         if startupDelay > 0:
             time.sleep(startupDelay)
 
-        dbusConn = dbus.SystemBus() if 'DBUS_SESSION_BUS_ADDRESS' not in os.environ else dbus.SessionBus()
+        dbusConn = dbus.SessionBus(private=True) if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus(private=True) 
+            #dbus.SystemBus() if 'DBUS_SESSION_BUS_ADDRESS' not in os.environ else dbus.SessionBus()
 
         chargers = discover_solar_chargers(dbusConn)
         logging.info("Discovered %d solar charger(s): %s" % (len(chargers), chargers))
@@ -323,7 +324,7 @@ def main():
             for i, charger_id in enumerate(chargers):
                 mpptid = i + 1
                 deviceinstance = deviceInstanceBase + i
-                dbusservice['%02d' % mpptid] = MpptTempControl(dbusConn=dbusConn, mpptid=mpptid, servicename=temperatureServiceName, deviceinstance=deviceinstance, id=charger_id)
+                dbusservice['%02d' % mpptid] = MpptTempControl(mpptid=mpptid, servicename=temperatureServiceName, deviceinstance=deviceinstance, id=charger_id)
                 GLib.timeout_add(updateInterval, dbusservice['%02d' % mpptid].update)
                 dbusservice['%02d' % mpptid].update()
 
@@ -331,7 +332,7 @@ def main():
             for i, alternator_id in enumerate(alternators):
                 alternatorid = i + 1
                 alternatorinstance = alternatorInstanceBase + i
-                dbusservice['%02d' % alternatorid] = AlternatorTempControl(dbusConn=dbusConn, alternatorid=alternatorid, servicename=temperatureServiceName, deviceinstance=alternatorinstance, id=alternator_id)
+                dbusservice['%02d' % alternatorid] = AlternatorTempControl(alternatorid=alternatorid, servicename=temperatureServiceName, deviceinstance=alternatorinstance, id=alternator_id)
                 GLib.timeout_add(updateInterval, dbusservice['%02d' % alternatorid].update)
                 dbusservice['%02d' % alternatorid].update()
 

@@ -15,7 +15,7 @@ Tested with Smartsolar 150/35, Smartsolar is connected via VE.Direct.
 - mv victron-dbus-tempcontrol-main dbus-tempcontrol
 - cd dbus-tempcontrol
 - Update config.ini (Set your personal settings, see below)
-- Check if its running with python dbus-tempcontrol.py, Cancel with Ctrl+C
+- Check if its running with python dbus-tempcontrol_no_relay.py, Cancel with Ctrl+C
 - chmod +x install.sh
 - ./install.sh
 
