@@ -14,6 +14,10 @@ import collections
 import optparse
 import configparser # for config/ini file
 
+temperatureRegisterId = 60891
+temperatureServiceName = 'com.victronenergy.temperature'
+solarChargerDbusPathPrefix = 'com.victronenergy.solarcharger.'
+alternatorChargerDbusPathPrefix = 'com.victronenergy.alternator.'
 
 # our own packages
 sys.path.insert(1, os.path.join(os.path.dirname(__file__), '/opt/victronenergy/dbus-systemcalc-py/ext/velib_python'))
@@ -44,7 +48,7 @@ def to_native_type(data):
 
 
 class MpptTempControl():
-    def __init__(self, servicename, deviceinstance, id, mpptid):
+    def __init__(self, dbusConn, servicename, deviceinstance, id, mpptid):
         logging.debug('Initialize MpptTempControl Service...')
 
 
@@ -52,9 +56,10 @@ class MpptTempControl():
         self.settings = None 
         self.id = id
         self.mpptid = mpptid
+        self.mppt01temp = None
         self.mppt01power = 0
         self.deviceinstance = deviceinstance
-        self.dbusConn = dbus.SessionBus(private=True) if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus(private=True)
+        self.dbusConn = dbusConn #dbus.SessionBus(private=True) if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus(private=True)
         self.mppt01serial = VeDbusItemImport(self.dbusConn, id, '/Serial')
         self.mppt01tempObj = self.dbusConn.get_object(id, '/Devices/0/VregLink')
         self.mppt01powerObj = VeDbusItemImport(self.dbusConn,id,'/Yield/Power')
@@ -109,34 +114,54 @@ class MpptTempControl():
           self._dbusserviceMppt01['/TemperatureType'] = newvalue
 
     def readMppt01Temp(self):
-        args = [60891]
-        ret = self.mppt01tempObj.get_dbus_method('GetVreg','com.victronenergy.VregLink')(*args) 
-        data = to_native_type(ret[1])
-        self.mppt01temp = (data[1]*256+data[0])/100 
+        try:
+            args = [temperatureRegisterId]
+            #mppt01tempObj = self.dbusConn.get_object(self.id, '/Devices/0/VregLink')
+            ret = self.mppt01tempObj.get_dbus_method('GetVreg','com.victronenergy.VregLink')(*args) 
+            if not ret or len(ret) < 2:
+                raise ValueError(f"Bad VREG response: {ret}")
+
+            data = to_native_type(ret[1])
+            if not isinstance(data, (list, tuple)) or len(data) < 2:
+                raise ValueError(f"Bad payload: {data}")
+
+            self.mppt01temp = (data[1]*256+data[0])/100 
+
+        except Exception as e:
+            logging.exception("GetVreg failed for %s", self.id)
+            self.mppt01temp = -98
 
     def readMppt01Power(self):
+        #mppt01powerObj = VeDbusItemImport(self.dbusConn, self.id,'/Yield/Power')
         self.mppt01power = self.mppt01powerObj.get_value()
         logging.info("Mppt power %d" % self.mppt01power)
     
     def update(self):
-        self.readMppt01Temp()
-        self.readMppt01Power()
-        self._dbusserviceMppt01['/Temperature'] = self.mppt01temp
-        logging.info("MPPT%02d Temperature: %.02f" % (self.mpptid , self.mppt01temp))
+        try:
+            logging.info("Updating MPPT %02d", self.mpptid)
+
+            self.readMppt01Temp()
+            self.readMppt01Power()
+            self._dbusserviceMppt01['/Temperature'] = self.mppt01temp or -99
+            logging.info("MPPT%02d Temperature: %.02f" % (self.mpptid , self.mppt01temp or -99))
+
+        except Exception as e:
+            logging.exception("MPPT update failed for %s", self.id)
+
         return True
 
-
 class AlternatorTempControl():
-    def __init__(self, servicename, deviceinstance, id, alternatorid):
+    def __init__(self, dbusConn, servicename, deviceinstance, id, alternatorid):
         logging.debug('Initialize AlternatorTempControl Service...')
 
 
         _c = lambda p, v: (str(v) + 'C')
         self.settings = None 
         self.id = id
+        self.alternator01temp = None
         self.alternatorid = alternatorid
         self.deviceinstance = deviceinstance
-        self.dbusConn = dbus.SessionBus(private=True) if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus(private=True)
+        self.dbusConn = dbusConn #dbus.SessionBus(private=True) if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus(private=True)
         self.alternator01serial = VeDbusItemImport(self.dbusConn, id, '/Serial')
         self.alternator01tempObj = self.dbusConn.get_object(id, '/Devices/0/VregLink')
         self._init_device_settings(deviceinstance)
@@ -190,15 +215,34 @@ class AlternatorTempControl():
           self._dbusservice01['/TemperatureType'] = newvalue
 
     def readAlternator01Temp(self):
-        args = [60891]
-        ret = self.alternator01tempObj.get_dbus_method('GetVreg','com.victronenergy.VregLink')(*args) 
-        data = to_native_type(ret[1])
-        self.alternator01temp = (data[1]*256+data[0])/100 
+        try:
+            args = [temperatureRegisterId]
+            #alternator01tempObj = self.dbusConn.get_object(self.id, '/Devices/0/VregLink')
+            ret = self.alternator01tempObj.get_dbus_method('GetVreg','com.victronenergy.VregLink')(*args) 
+            if not ret or len(ret) < 2:
+                raise ValueError(f"Bad VREG response: {ret}")
+
+            data = to_native_type(ret[1])
+            if not isinstance(data, (list, tuple)) or len(data) < 2:
+                raise ValueError(f"Bad payload: {data}")
+
+            self.alternator01temp = (data[1]*256+data[0])/100 
     
+        except Exception as e:
+            logging.exception("GetVreg failed for %s", self.id)
+            self.alternator01temp = -98
+
     def update(self):
-        self.readAlternator01Temp()
-        self._dbusservice01['/Temperature'] = self.alternator01temp
-        logging.info("Alt%02d Temperature: %.02f" % (self.alternatorid , self.alternator01temp))
+        try:
+            logging.info("Updating Alt %02d", self.alternatorid)
+
+            self.readAlternator01Temp()
+            self._dbusservice01['/Temperature'] = self.alternator01temp or -99
+            logging.info("Alt%02d Temperature: %.02f" % (self.alternatorid , self.alternator01temp or -99))
+
+        except Exception as e:
+            logging.exception("Alt update failed for %s", self.id)
+
         return True
 
 
@@ -207,24 +251,32 @@ def getConfig():
     config.read("%s/config.ini" % (os.path.dirname(os.path.realpath(__file__))))
     return config;
 
-
-def discover_solar_chargers():
-    bus = dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()
+def discover_chargers(bus, dbusPathPrefix):
+    #bus = dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()
     proxy = bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus')
     iface = dbus.Interface(proxy, 'org.freedesktop.DBus')
     names = iface.ListNames()
-    return sorted(str(n) for n in names if str(n).startswith('com.victronenergy.solarcharger.'))
+    return sorted(str(n) for n in names if str(n).startswith(dbusPathPrefix))
 
-def discover_alternator_chargers():
-    bus = dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()
-    proxy = bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus')
-    iface = dbus.Interface(proxy, 'org.freedesktop.DBus')
-    names = iface.ListNames()
-    return sorted(str(n) for n in names if str(n).startswith('com.victronenergy.alternator.'))
+def discover_solar_chargers(bus):
+    return discover_chargers(bus, solarChargerDbusPathPrefix)
+    #bus = dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()
+    #proxy = bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus')
+    #iface = dbus.Interface(proxy, 'org.freedesktop.DBus')
+    #names = iface.ListNames()
+    #return sorted(str(n) for n in names if str(n).startswith('com.victronenergy.solarcharger.'))
+
+def discover_alternator_chargers(bus):
+    return discover_chargers(bus, alternatorChargerDbusPathPrefix)
+    #bus = dbus.SessionBus() if 'DBUS_SESSION_BUS_ADDRESS' in os.environ else dbus.SystemBus()
+    #proxy = bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus')
+    #iface = dbus.Interface(proxy, 'org.freedesktop.DBus')
+    #names = iface.ListNames()
+    #return sorted(str(n) for n in names if str(n).startswith('com.victronenergy.alternator.'))
 
 def main():
         print (" *********************************************** ")
-        print (" T E M P C O N T RO L   M A I N   S T A R T E D   ")
+        print (" T E M P C O N T R O L   M A I N   S T A R T E D ")
         print (" *********************************************** ")
         print (" ")
         logHandler = RotatingFileHandler("%s/current.log" % (os.path.dirname(os.path.realpath(__file__))), mode='a', maxBytes=5*1024*1024, 
@@ -255,10 +307,12 @@ def main():
         if startupDelay > 0:
             time.sleep(startupDelay)
 
-        chargers = discover_solar_chargers()
+        dbusConn = dbus.SystemBus() if 'DBUS_SESSION_BUS_ADDRESS' not in os.environ else dbus.SessionBus()
+
+        chargers = discover_solar_chargers(dbusConn)
         logging.info("Discovered %d solar charger(s): %s" % (len(chargers), chargers))
 
-        alternators = discover_alternator_chargers()
+        alternators = discover_alternator_chargers(dbusConn)
         logging.info("Discovered %d alternator charger(s): %s" % (len(alternators), alternators))
 
         if not chargers and not alternators:
@@ -269,7 +323,7 @@ def main():
             for i, charger_id in enumerate(chargers):
                 mpptid = i + 1
                 deviceinstance = deviceInstanceBase + i
-                dbusservice['%02d' % mpptid] = MpptTempControl(mpptid=mpptid, servicename='com.victronenergy.temperature', deviceinstance=deviceinstance, id=charger_id)
+                dbusservice['%02d' % mpptid] = MpptTempControl(dbusConn=dbusConn, mpptid=mpptid, servicename=temperatureServiceName, deviceinstance=deviceinstance, id=charger_id)
                 GLib.timeout_add(updateInterval, dbusservice['%02d' % mpptid].update)
                 dbusservice['%02d' % mpptid].update()
 
@@ -277,7 +331,7 @@ def main():
             for i, alternator_id in enumerate(alternators):
                 alternatorid = i + 1
                 alternatorinstance = alternatorInstanceBase + i
-                dbusservice['%02d' % alternatorid] = AlternatorTempControl(alternatorid=alternatorid, servicename='com.victronenergy.temperature', deviceinstance=alternatorinstance, id=alternator_id)
+                dbusservice['%02d' % alternatorid] = AlternatorTempControl(dbusConn=dbusConn, alternatorid=alternatorid, servicename=temperatureServiceName, deviceinstance=alternatorinstance, id=alternator_id)
                 GLib.timeout_add(updateInterval, dbusservice['%02d' % alternatorid].update)
                 dbusservice['%02d' % alternatorid].update()
 
